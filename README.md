@@ -131,8 +131,8 @@ output/
 
 ### 触发方式
 
-- **手动发布**：进入仓库 **Actions → Build and release API 102 → Run workflow**，选择 `main`，填写未使用过的标签（例如 `v0.4-beta5-api102.2`），选择是否为预发布，然后运行。
-- **标签发布**：将 `v` 开头的版本标签推送到仓库。包含 `alpha`、`beta`、`rc` 或 `test` 的标签自动标记为预发布。
+- **手动发布**：进入仓库 **Actions → Build and release API 102 → Run workflow**，选择 `main`，填写未使用过的标签（例如 `v0.4-beta5-api102.2`），默认发布正式 Release；需要预发布时再勾选 `prerelease`。
+- **标签发布**：将 `v` 开头的版本标签推送到仓库，默认发布正式 Release。原版版本名里的 `beta5` 不影响适配版的发布状态。
 
 版本名取标签去掉开头的 `v`；Android `versionCode` 使用 `1000 + github.run_number` 自动递增。不要删除后重新创建工作流来重置运行编号。已有同名 Release 会使流程停止，避免覆盖旧版本；已存在的标签必须指向本次构建的提交。
 

@@ -58,6 +58,21 @@ class ReleasePreparationTest(unittest.TestCase):
              patch.object(release, 'api', return_value=None): release.prepare()
         self.assertIn('RELEASE_PRERELEASE=false\n', self.env_file.read_text())
 
+    def test_upstream_beta_name_does_not_force_prerelease(self):
+        with patch.dict(os.environ, {'GITHUB_EVENT_NAME': 'push', 'GITHUB_REF_NAME': 'v0.4-beta5-api102.2'}), \
+             patch.object(release, 'api', return_value=None): release.prepare()
+        self.assertIn('RELEASE_PRERELEASE=false\n', self.env_file.read_text())
+
+    def test_manual_release_defaults_to_stable(self):
+        os.environ.pop('INPUT_PRERELEASE')
+        with patch.object(release, 'api', return_value=None): release.prepare()
+        self.assertIn('RELEASE_PRERELEASE=false\n', self.env_file.read_text())
+
+    def test_manual_false_is_stable(self):
+        with patch.dict(os.environ, {'INPUT_PRERELEASE': 'false'}), \
+             patch.object(release, 'api', return_value=None): release.prepare()
+        self.assertIn('RELEASE_PRERELEASE=false\n', self.env_file.read_text())
+
     def test_modified_apk_cannot_be_packaged(self):
         root = Path(self.tmp.name)
         (root / 'output').mkdir()

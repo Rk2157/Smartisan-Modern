@@ -44,8 +44,9 @@ def prepare():
         current = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
         if obj['sha'] != current:
             raise ValueError('Existing tag does not point at the checked-out commit')
-    prerelease = (os.environ.get('INPUT_PRERELEASE', 'true').lower() == 'true'
-                  if os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch' else bool(re.search(r'alpha|beta|rc|test', tag, re.I)))
+    # The upstream version contains "beta5"; it does not determine this adaptation's release status.
+    prerelease = (os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch'
+                  and os.environ.get('INPUT_PRERELEASE', 'false').lower() == 'true')
     version_code = 1000 + int(os.environ['GITHUB_RUN_NUMBER'])
     if version_code > 2100000000:
         raise ValueError('Android versionCode limit exceeded')

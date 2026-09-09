@@ -10,7 +10,7 @@ on:
       prerelease:
         description: 'Mark this release as a prerelease'
         type: boolean
-        default: true
+        default: false
   push:
     tags:
       - 'v*'
