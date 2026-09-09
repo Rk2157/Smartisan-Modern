@@ -1,0 +1,38 @@
+# Input/output APKs and reverse-engineering workspace
+*.apk
+/analysis/
+/decoded/
+/migration/build/
+/output/*
+!/output/使用说明.md
+
+# Downloaded tools, frameworks and dependencies
+/tools/*
+!/tools/fetch_migration_deps.py
+!/tools/migration/
+/tools/migration/*
+!/tools/migration/dependencies.json
+*.aar
+*.jar
+*.dex
+*.class
+
+# Signing keys and local credentials
+/migration/signing/
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.pem
+*.key
+.env
+.env.*
+
+# Python and editor caches
+__pycache__/
+*.py[cod]
+.venv/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
