@@ -8,7 +8,7 @@
 
 ## 当前状态
 
-当前版本：`0.4-beta5-api102-test1`。
+初始迁移测试版：`0.4-beta5-api102-test1`。自动构建的发布版本请见 **[GitHub Releases](https://github.com/lilu0826/Smartisan-Modern/releases)**。
 
 - 已完成 API 102 入口、Hook、配置通信和激活检测迁移。
 - 已通过编译、45 项 API 接口契约断言、定位对象转换测试、应用侧类加载隔离测试，以及 APK 静态和签名校验。
@@ -56,6 +56,8 @@
 
 ## 从源码构建
 
+也可以运行 `python tools/prepare_build.py` 自动获取下文指定的原始 APK、Apktool 和 Maven 依赖。所有下载均校验固定 SHA-256；已有文件哈希不一致时会停止构建。
+
 当前脚本面向 **Windows / PowerShell**，需要 Python 3.12、JDK 17 和网络连接用于准备依赖。
 
 ### 1. 准备原始 APK
@@ -79,7 +81,7 @@ python tools/fetch_migration_deps.py
 Invoke-WebRequest -Uri 'https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar' -OutFile 'tools/apktool.jar'
 ```
 
-依赖下载脚本会获取 API、service、interface 102.0.0、Android 编译桩、D8/R8 和签名库。依赖版本、来源及当前参考哈希见 [dependencies.json](tools/migration/dependencies.json)；脚本会记录本次取得的文件哈希。
+依赖下载脚本会获取 API、service、interface 102.0.0、Android 编译桩、D8/R8 和签名库。依赖版本、来源及固定哈希见 [dependencies.json](tools/migration/dependencies.json)；下载后必须通过哈希校验。
 
 ### 3. 构建与验证
 
@@ -114,6 +116,7 @@ migration/
   verify_apk.py            二进制清单、DEX、资源及对齐校验
   SignApk.java              签名和签名验证
 tools/
+  prepare_build.py          下载并校验原 APK、Apktool 和依赖
   fetch_migration_deps.py   依赖准备
   migration/dependencies.json
 output/
@@ -121,6 +124,40 @@ output/
 ```
 
 反编译工作区、原始 APK、生成 APK、第三方工具二进制和私钥均不提交到 Git。
+
+## GitHub Actions 自动发布
+
+工作流：[Build and release API 102](.github/workflows/release.yml)。使用 Windows runner、Python 3.12 和 JDK 17，自动下载已适配的原版 `11-0.4-beta5`，校验输入，构建签名 APK，执行测试与静态检查，再发布到 Releases。
+
+### 触发方式
+
+- **手动发布**：进入仓库 **Actions → Build and release API 102 → Run workflow**，选择 `main`，填写未使用过的标签（例如 `v0.4-beta5-api102.2`），选择是否为预发布，然后运行。
+- **标签发布**：将 `v` 开头的版本标签推送到仓库。包含 `alpha`、`beta`、`rc` 或 `test` 的标签自动标记为预发布。
+
+版本名取标签去掉开头的 `v`；Android `versionCode` 使用 `1000 + github.run_number` 自动递增。不要删除后重新创建工作流来重置运行编号。已有同名 Release 会使流程停止，避免覆盖旧版本；已存在的标签必须指向本次构建的提交。
+
+Release 包含 APK、安装说明、构建来源和哈希信息、静态检查结果与 `SHA256SUMS.txt`。附件先上传到草稿 Release，全部成功后才公开；发布步骤失败时，已验证的附件仍保存在 Actions Artifact 中 14 天。若失败留下了草稿，确认原因后删除该草稿再重试，或使用新标签。
+
+### 持久签名
+
+发布必须配置两个 **Actions repository secrets**：
+
+| Secret | 内容 |
+| --- | --- |
+| `KEYSTORE_BASE64` | PKCS#12 签名文件的 Base64 内容 |
+| `KEYSTORE_PASSWORD` | 对应密钥库密码；工作流默认私钥密码相同、别名为 `migration` |
+
+本仓库发布使用现有个人测试版的签名，可覆盖同一签名的测试包。Fork 本仓库时需要自行配置自己的 Secrets，不能继承原仓库 Secrets，也不能覆盖其他签名的安装包。
+
+如需手动配置现有本地测试密钥，在 PowerShell 中执行以下命令，将内容复制到 Secret 编辑框（不要提交密钥或 Base64 文本）：
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes((Resolve-Path 'migration/signing/local-test.p12'))) | Set-Clipboard
+```
+
+签名文件仅在构建步骤还原到 runner 临时目录，构建结束后删除，不会上传到 Artifact 或 Release。CI 缺少密钥会直接失败，不会临时生成新密钥导致后续无法覆盖安装。
+
+本地也可通过 `APP_VERSION_NAME`、`APP_VERSION_CODE` 设置版本，通过 `SIGNING_KEYSTORE`、`KEYSTORE_PASSWORD`、`KEY_PASSWORD`、`KEY_ALIAS` 使用现有的其他签名。
 
 ## 测试与问题反馈
 

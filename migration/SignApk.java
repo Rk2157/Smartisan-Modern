@@ -10,13 +10,16 @@ import java.util.Collections;
 public final class SignApk {
     public static void main(String[] args) throws Exception {
         if (args[0].equals("sign")) {
+            String password = System.getenv().getOrDefault("KEYSTORE_PASSWORD", "local-test-only");
+            String keyPassword = System.getenv().getOrDefault("KEY_PASSWORD", password);
+            String alias = System.getenv().getOrDefault("KEY_ALIAS", "migration");
             KeyStore keys = KeyStore.getInstance("PKCS12");
             try (FileInputStream stream = new FileInputStream(args[1])) {
-                keys.load(stream, "local-test-only".toCharArray());
+                keys.load(stream, password.toCharArray());
             }
             ApkSigner.SignerConfig signer = new ApkSigner.SignerConfig.Builder("smartisan-api102-test",
-                    (PrivateKey) keys.getKey("migration", "local-test-only".toCharArray()),
-                    Collections.singletonList((X509Certificate) keys.getCertificate("migration"))).build();
+                    (PrivateKey) keys.getKey(alias, keyPassword.toCharArray()),
+                    Collections.singletonList((X509Certificate) keys.getCertificate(alias))).build();
             new ApkSigner.Builder(Collections.singletonList(signer)).setInputApk(new File(args[2]))
                     .setOutputApk(new File(args[3])).setMinSdkVersion(26)
                     .setV1SigningEnabled(true).setV2SigningEnabled(true).setV3SigningEnabled(true)

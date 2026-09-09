@@ -5,7 +5,6 @@ import json
 import os
 from pathlib import Path
 import re
-import shutil
 import struct
 import subprocess
 import zipfile
@@ -20,6 +19,12 @@ STAGE = BUILD / 'decoded'
 OUT = ROOT / 'output'
 ORIGINAL_SHA = '90c6bfaa674fe39e6eebf2fb929f4ca3833882b0db51486c8701cbe6d27eb854'
 NS = 'http://schemas.android.com/apk/res/android'
+VERSION_NAME = os.environ.get('APP_VERSION_NAME', '0.4-beta5-api102-test1')
+VERSION_CODE = int(os.environ.get('APP_VERSION_CODE', '12'))
+if not re.fullmatch(r'[0-9][0-9A-Za-z.+_-]{0,79}', VERSION_NAME):
+    raise ValueError('Invalid APP_VERSION_NAME')
+if not 12 <= VERSION_CODE <= 2100000000:
+    raise ValueError('APP_VERSION_CODE must be between 12 and 2100000000')
 
 def run(*args):
     print('RUN', ' '.join(str(x) for x in args), flush=True)
@@ -50,8 +55,10 @@ def patch():
     })
     tree.write(manifest, encoding='utf-8', xml_declaration=True)
     yml = STAGE / 'apktool.yml'
-    yml.write_text(yml.read_text().replace('versionCode: 11', 'versionCode: 12')
-                   .replace('versionName: 0.4-beta5', 'versionName: 0.4-beta5-api102-test1'), encoding='utf-8')
+    original = yml.read_text(encoding='utf-8')
+    assert 'versionCode: 11' in original and 'versionName: 0.4-beta5' in original
+    yml.write_text(original.replace('versionCode: 11', f'versionCode: {VERSION_CODE}')
+                   .replace('versionName: 0.4-beta5', f'versionName: {VERSION_NAME}'), encoding='utf-8')
     (STAGE / 'assets/xposed_init').unlink()
     obsolete = [
         'a.1/a.smali', 'a.1/a$a.smali', 'a.1/a$b.smali', 'a.1/a$c.smali',
@@ -130,6 +137,9 @@ def aligned_zip(source, dest, dex):
 
 def main():
     assert hashlib.sha256((ROOT / 'app-general-release.apk').read_bytes()).hexdigest() == ORIGINAL_SHA
+    keys = Path(os.environ.get('SIGNING_KEYSTORE', str(ROOT / 'migration/signing/local-test.p12'))).resolve()
+    if (os.environ.get('CI') == 'true' or 'SIGNING_KEYSTORE' in os.environ) and not keys.is_file():
+        raise RuntimeError('CI requires an existing signing key; configure Actions signing secrets')
     BUILD.mkdir(parents=True)
     OUT.mkdir(exist_ok=True)
     # Decode the immutable input every time; do not rely on editable inspection output.
@@ -155,19 +165,20 @@ def main():
         program, DEPS / 'service/classes.jar', DEPS / 'interface/classes.jar')
     run(JAVA, '-jar', ROOT / 'tools/apktool.jar', 'b', STAGE, '-p', ROOT / 'tools/framework', '-o', BUILD / 'base.apk')
     aligned_zip(BUILD / 'base.apk', BUILD / 'aligned.apk', dex / 'classes.dex')
-    signing = ROOT / 'migration/signing'
-    signing.mkdir(exist_ok=True)
-    keys = signing / 'local-test.p12'
     if not keys.exists():
+        keys.parent.mkdir(parents=True, exist_ok=True)
         run(JAVA_HOME / 'bin/keytool.exe', '-genkeypair', '-keystore', keys, '-storetype', 'PKCS12',
             '-storepass', 'local-test-only', '-keypass', 'local-test-only', '-alias', 'migration',
             '-keyalg', 'RSA', '-keysize', '2048', '-validity', '10000',
             '-dname', 'CN=Smartisan API102 Local Test,OU=Personal migration,O=Local,C=CN', '-noprompt')
     run(JAVAC, '-cp', DEPS / 'apksigner.jar', '-d', classes, ROOT / 'migration/SignApk.java')
-    apk = OUT / 'app-general-api102-test1.apk'
+    filename = ('app-general-api102-test1.apk' if VERSION_NAME == '0.4-beta5-api102-test1'
+                else f'Smartisan-Modern-{VERSION_NAME}.apk')
+    apk = OUT / filename
     run(JAVA, '-cp', os.pathsep.join([str(classes), str(DEPS / 'apksigner.jar')]), 'SignApk',
         'sign', keys, BUILD / 'aligned.apk', apk)
     manifest = {'original_sha256': ORIGINAL_SHA, 'apk': apk.name,
+                'version_name': VERSION_NAME, 'version_code': VERSION_CODE,
                 'sha256': hashlib.sha256(apk.read_bytes()).hexdigest(), 'build_directory': str(BUILD),
                 'runtime_tested': False}
     (OUT / 'build-result.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')

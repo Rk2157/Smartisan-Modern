@@ -1,0 +1,104 @@
+name: Build and release API 102
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, for example v0.4-beta5-api102.1'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark this release as a prerelease'
+        type: boolean
+        default: true
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smartisan-release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Set up Java
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Validate release tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
+          GH_TOKEN: ${{ github.token }}
+        run: python .github/scripts/release.py prepare
+
+      - name: Test release validation
+        run: python .github/scripts/test_release.py
+
+      - name: Download and verify upstream APK and build tools
+        run: python tools/prepare_build.py
+
+      - name: Build with persistent signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: migration
+        run: |
+          if (-not $env:KEYSTORE_BASE64 -or -not $env:KEYSTORE_PASSWORD) {
+            throw 'Configure KEYSTORE_BASE64 and KEYSTORE_PASSWORD in Actions secrets first.'
+          }
+          $keyPath = Join-Path $env:RUNNER_TEMP 'smartisan-release.p12'
+          try {
+            [IO.File]::WriteAllBytes($keyPath, [Convert]::FromBase64String($env:KEYSTORE_BASE64))
+            $env:SIGNING_KEYSTORE = $keyPath
+            Remove-Item Env:KEYSTORE_BASE64
+            python migration/build.py
+            if ($LASTEXITCODE -ne 0) { throw 'APK build failed.' }
+          } finally {
+            if (Test-Path -LiteralPath $keyPath) { Remove-Item -LiteralPath $keyPath -Force }
+          }
+
+      - name: Test API 102 contracts
+        run: python migration/test.py
+
+      - name: Verify final APK
+        run: python migration/verify_apk.py
+
+      - name: Prepare release assets and notes
+        run: python .github/scripts/release.py package
+
+      - name: Preserve verified build artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Smartisan-Modern-${{ env.RELEASE_TAG }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python .github/scripts/release.py publish

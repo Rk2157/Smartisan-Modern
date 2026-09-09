@@ -2,6 +2,7 @@ import concurrent.futures, hashlib, pathlib, urllib.request, zipfile, json
 
 ROOT = pathlib.Path(__file__).resolve().parent / 'migration'
 ROOT.mkdir(exist_ok=True)
+LOCK = json.loads((ROOT / 'dependencies.json').read_text(encoding='utf-8'))
 URLS = {
     'api.aar': 'https://repo.maven.apache.org/maven2/io/github/libxposed/api/102.0.0/api-102.0.0.aar',
     'api-sources.jar': 'https://repo.maven.apache.org/maven2/io/github/libxposed/api/102.0.0/api-102.0.0-sources.jar',
@@ -15,12 +16,17 @@ URLS = {
 
 def fetch(item):
     name, url = item
+    if LOCK[name]['url'] != url:
+        raise ValueError('Dependency URL differs from lock file: ' + name)
     path = ROOT / name
     if not path.exists():
         with urllib.request.urlopen(url, timeout=60) as response:
             data = response.read()
         path.write_bytes(data)
-    print(name, path.stat().st_size, hashlib.sha256(path.read_bytes()).hexdigest(), flush=True)
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if digest != LOCK[name]['sha256']:
+        raise ValueError('Dependency SHA-256 mismatch: ' + name)
+    print(name, path.stat().st_size, digest, flush=True)
     if name.endswith('.aar') or name.endswith('-sources.jar'):
         with zipfile.ZipFile(path) as archive:
             archive.extractall(ROOT / name.rsplit('.', 1)[0])
@@ -29,4 +35,4 @@ if __name__ == '__main__':
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         for result in pool.map(fetch, URLS.items()):
             pass
-    (ROOT / 'dependencies.json').write_text(json.dumps({name: {'url': url, 'sha256': hashlib.sha256((ROOT/name).read_bytes()).hexdigest()} for name, url in URLS.items()}, indent=2))
+    print('All dependencies verified against dependencies.json')

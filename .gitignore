@@ -3,12 +3,14 @@
 /analysis/
 /decoded/
 /migration/build/
+/release-assets/
 /output/*
 !/output/使用说明.md
 
 # Downloaded tools, frameworks and dependencies
 /tools/*
 !/tools/fetch_migration_deps.py
+!/tools/prepare_build.py
 !/tools/migration/
 /tools/migration/*
 !/tools/migration/dependencies.json

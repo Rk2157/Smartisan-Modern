@@ -104,7 +104,8 @@ def verify():
         elements = manifest_elements(archive.read('AndroidManifest.xml'))
         manifest = next(attrs for name, attrs in elements if name == 'manifest')
         assert manifest['package'] == 'com.fuck.android.rimet'
-        assert manifest['versionCode'] == 12 and manifest['versionName'] == '0.4-beta5-api102-test1'
+        assert manifest['versionCode'] == build.get('version_code', 12)
+        assert manifest['versionName'] == build.get('version_name', '0.4-beta5-api102-test1')
         assert not any(name == 'meta-data' and attrs.get('name', '').startswith('xposed') for name, attrs in elements)
         assert any(name == 'provider' and attrs.get('name') == 'io.github.libxposed.service.XposedProvider'
                    and attrs.get('authorities') == 'com.fuck.android.rimet.XposedService'
