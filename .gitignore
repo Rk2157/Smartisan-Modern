@@ -12,12 +12,14 @@
 !/tools/fetch_migration_deps.py
 !/tools/prepare_build.py
 !/tools/migration/
+!/tools/diagnostics/
 /tools/migration/*
 !/tools/migration/dependencies.json
 *.aar
 *.jar
 *.dex
 *.class
+/diagnostics-output/
 
 # Signing keys and local credentials
 /migration/signing/
