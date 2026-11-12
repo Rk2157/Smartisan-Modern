@@ -23,6 +23,9 @@ public final class ModernModule extends XposedModule {
     @Override public void onPackageReady(PackageReadyParam param) {
         if ("com.fuck.android.rimet".equals(param.getPackageName())) return;
         ClassLoader loader = param.getClassLoader();
+        if ("com.alibaba.android.rimet".equals(param.getPackageName())) {
+            installDingTalkLocationFactories(loader);
+        }
         Class<?> client;
         Class<?> listener;
         try {
@@ -67,6 +70,37 @@ public final class ModernModule extends XposedModule {
             Class<?> telephony = Class.forName("android.telephony.TelephonyManager", false, loader);
             installProfileValue(telephony, "getAllCellInfo", "a", "getCellInfoList");
         } catch (ClassNotFoundException error) { ModuleLog.error("Android service class unavailable", error); }
+    }
+
+    private void installDingTalkLocationFactories(ClassLoader loader) {
+        try {
+            Class<?> model = Class.forName("com.alibaba.android.rimet.model.DtLocation", false, loader);
+            Class<?> serviceType = Class.forName("com.alibaba.android.rimet.LocationService$ServiceType", false, loader);
+            installLocationFactory(model, "fromLocation", new Class<?>[]{android.location.Location.class, serviceType});
+            Class<?> amapLocation = Class.forName("com.amap.api.location.AMapLocation", false, loader);
+            installLocationFactory(model, "fromAMapLocation", new Class<?>[]{amapLocation, serviceType});
+        } catch (ClassNotFoundException | LinkageError error) {
+            ModuleLog.error("DingTalk location model unavailable", error);
+        }
+    }
+
+    private void installLocationFactory(Class<?> model, String name, Class<?>[] args) {
+        install(model, name, args, chain -> {
+            // SYSTEM coordinates are converted by DingTalk before this point. Applying the saved
+            // coordinate afterwards avoids transforming it a second time and also covers direct
+            // AMap conversions which never register an AMapLocationListener.
+            Object result = chain.proceed();
+            if (result == null) return null;
+            try {
+                Object location = ProfileStorage.value(readProfile(), "c");
+                if (location != null) LocationTransfer.apply(result, location, true);
+            } catch (Exception | LinkageError error) {
+                // The converter has already run. Keep this DTO, including any fields already
+                // applied, rather than letting a protective fallback invoke the converter again.
+                ModuleLog.error("Cannot apply snapshot to DingTalk location", error);
+            }
+            return result;
+        });
     }
 
     private synchronized Object readProfile() {
