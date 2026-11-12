@@ -9,11 +9,13 @@ import struct
 import subprocess
 import zipfile
 
+from java_tools import java_tool
+
 ROOT = Path(__file__).resolve().parent.parent
 DEPS = ROOT / 'tools/migration'
-JAVA_HOME = Path(os.environ.get('JAVA_HOME', r'C:\Program Files\Eclipse Adoptium\jdk-17.0.17.10-hotspot'))
-JAVA = JAVA_HOME / 'bin/java.exe'
-JAVAC = JAVA_HOME / 'bin/javac.exe'
+JAVA = java_tool('java')
+JAVAC = java_tool('javac')
+KEYTOOL = java_tool('keytool')
 BUILD = ROOT / 'migration/build' / datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
 STAGE = BUILD / 'decoded'
 OUT = ROOT / 'output'
@@ -167,7 +169,7 @@ def main():
     aligned_zip(BUILD / 'base.apk', BUILD / 'aligned.apk', dex / 'classes.dex')
     if not keys.exists():
         keys.parent.mkdir(parents=True, exist_ok=True)
-        run(JAVA_HOME / 'bin/keytool.exe', '-genkeypair', '-keystore', keys, '-storetype', 'PKCS12',
+        run(KEYTOOL, '-genkeypair', '-keystore', keys, '-storetype', 'PKCS12',
             '-storepass', 'local-test-only', '-keypass', 'local-test-only', '-alias', 'migration',
             '-keyalg', 'RSA', '-keysize', '2048', '-validity', '10000',
             '-dname', 'CN=Smartisan API102 Local Test,OU=Personal migration,O=Local,C=CN', '-noprompt')

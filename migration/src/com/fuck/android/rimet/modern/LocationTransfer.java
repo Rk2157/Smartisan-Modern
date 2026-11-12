@@ -17,12 +17,25 @@ public final class LocationTransfer {
         Location source = (Location) snapshot;
         Location base = original instanceof Location ? (Location) original : source;
         Object target = targetType.getConstructor(Location.class).newInstance(base);
+        ((Location) target).setExtras(source.getExtras());
+        applySnapshot(target, snapshot, jitter, false);
+        return target;
+    }
+
+    /** Updates coordinates/address while retaining the target model's extras and status/source fields. */
+    public static void apply(Object target, Object snapshot, boolean jitter)
+            throws ReflectiveOperationException {
+        applySnapshot(target, snapshot, jitter, true);
+    }
+
+    private static void applySnapshot(Object target, Object snapshot, boolean jitter, boolean preserveStatus)
+            throws ReflectiveOperationException {
+        Location source = (Location) snapshot;
         Location location = (Location) target;
         location.setLatitude(source.getLatitude());
         location.setLongitude(source.getLongitude());
         location.setAltitude(source.getAltitude());
         location.setAccuracy(source.getAccuracy());
-        location.setExtras(source.getExtras());
         if (jitter) {
             // Independent offsets around the saved coordinate; never mutate the saved snapshot.
             double latitude = source.getLatitude();
@@ -34,9 +47,18 @@ public final class LocationTransfer {
             double lon = source.getLongitude() + Math.toDegrees(longitudeAngle * ThreadLocalRandom.current().nextDouble(-1.0, 1.0));
             location.setLongitude((lon + 540.0) % 360.0 - 180.0);
         }
-        for (String detail : DETAILS) copyDetail(snapshot, target, "get" + detail, "set" + detail);
+        for (String detail : DETAILS) {
+            if (preserveStatus && isStatusDetail(detail)) continue;
+            copyDetail(snapshot, target, "get" + detail, "set" + detail);
+        }
         copyDetail(snapshot, target, "getStreetNum", "setNumber");
-        return target;
+    }
+
+    private static boolean isStatusDetail(String detail) {
+        // SDK error messages can derive their text from LocationDetail; retain it with status.
+        return "LocationDetail".equals(detail) || "LocationType".equals(detail) || "TrustedLevel".equals(detail)
+                || "ErrorCode".equals(detail) || "ErrorInfo".equals(detail)
+                || "CoordType".equals(detail) || "ConScenario".equals(detail);
     }
 
     private static void copyDetail(Object source, Object target, String getter, String setter)
